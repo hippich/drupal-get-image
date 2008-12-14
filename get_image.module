@@ -1,0 +1,82 @@
+<?php
+// $Id$
+
+function get_image_menu(){
+  $items = array();
+  $items['admin/settings/get_image'] = array(
+    'title' => 'Get Image',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('get_image_settings_form'),
+    'access callback' => 'user_access',
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM
+  );
+  return $items;
+}
+function get_image_nodeapi(&$node, $op) {
+  global $user;
+  switch ($op) {
+    case 'presave':
+      if(variable_get('get_image_'.$node->type, 0)){
+        $node->body = preg_replace_callback('/(<img.*?src=")(.*?)"/ms', '_get_image_save', $node->body);
+        $node->teaser = preg_replace_callback('/(<img.*?src=")(.*?)"/ms', '_get_image_save', $node->teaser);
+      }
+    break;
+  }
+}
+
+function _get_image_save($mat){
+  if(!strstr($mat[2], $GLOBALS['base_url'])){
+    $data = @file_get_contents($mat[2]);
+    $filename = end(explode('/', $mat[2]));
+    $file = file_save_data($data, get_image_path().'/'.$filename);
+    drupal_set_message(t('Save "@name" success', array('@name' => $mat[2])));
+    return $mat[1].$GLOBALS['base_url']. '/' .$file.'"';
+  }else{
+    return $mat[0];
+  }
+}
+
+function get_image_path() {
+	global $user;
+	$path = array();
+	if(!variable_get('get_image_path', 'get_image')){
+		$path[] = 'get_image';
+	}else{
+		$mm = format_date(time(), 'custom', "Y|m|d");
+    $m = explode('|', $mm);
+		$a = array('%uid' => $user->uid, '%username' => $user->name, '%Y' => $m[0], '%m' => $m[1], '%d' => $m[2]);
+		$b = strtr(variable_get('get_image_path', 'get_image'), $a);
+		$path = explode('/',$b);
+	}
+
+	$dirs = array();
+	foreach($path as $folder) {
+	$dirs[] = $folder;
+		$t = file_create_path(file_directory_path().'/' .implode("/", $dirs));
+		if (!file_check_directory($t, FILE_CREATE_DIRECTORY)) {
+			return false;
+		}
+	}
+	return file_directory_path().'/' .$b;
+}
+
+function get_image_settings_form() {
+	$form['get_image_path'] = array(
+		'#type'=> 'textfield',
+		'#title' => t('Path of saving'),
+		'#default_value' => variable_get('get_image_path', 'get_image'),
+		'#description' => t('The path where the files should be saved, may save by user id or user name or time, e.g.: get_image/%uid or photos/%username or image/%Y/%m/%d. Available variables: %uid, %username, %Y, %m, %d.'),
+		'#size' => '40',
+		'#required' => TRUE,
+	);
+  $types = node_get_types();
+  foreach ($types as $type){
+  	$form['get_image_'.$type->type] = array(
+  		'#title' => $type->name,
+  		'#type' => 'checkbox',
+  		'#default_value' => variable_get('get_image_'.$type->type, 0),
+  	);
+  }
+	return system_settings_form($form);
+}

@@ -1,0 +1,6 @@
+; $Id$
+name = "get_image"
+description = Long-range images will be saved to the local server.
+version = "6.x-1.0-beta1"
+core = "6.x"
+project = "get_image"
