@@ -26,12 +26,15 @@ function get_image_nodeapi(&$node, $op) {
 }
 
 function _get_image_save($mat){
-  if(!strstr($mat[2], $GLOBALS['base_url'])){
-    $data = @file_get_contents($mat[2]);
-    $filename = end(explode('/', $mat[2]));
-    $file = file_save_data($data, get_image_path().'/'.$filename);
-    drupal_set_message(t('Save "@name" success', array('@name' => $mat[2])));
-    return $mat[1].$GLOBALS['base_url']. '/' .$file.'"';
+  if(!strstr($mat[2], $GLOBALS['base_url']) && strstr($mat[2], 'http://')){
+    if($data = @file_get_contents($mat[2])){
+      $filename = end(explode('/', $mat[2]));
+      $file = file_save_data($data, get_image_path().'/'.$filename);
+      drupal_set_message(t('Save "@name" success', array('@name' => $mat[2])));
+      return $mat[1].$GLOBALS['base_url']. '/' .$file.'"';
+    }else{
+      return $mat[0];
+    }
   }else{
     return $mat[0];
   }
