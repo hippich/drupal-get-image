@@ -17,11 +17,10 @@ function get_image_nodeapi(&$node, $op) {
   global $user;
   switch ($op) {
     case 'presave':
-      if(variable_get('get_image_'.$node->type, 0)){
+      if(variable_get('get_image_'.$node->type, 0) && $node->body){
         $node->body = preg_replace_callback('/(<img.*?src=")(.*?)"/ms', '_get_image_save', $node->body);
-        $node->teaser = preg_replace_callback('/(<img.*?src=")(.*?)"/ms', '_get_image_save', $node->teaser);
+        $node->teaser = node_teaser($node->body, isset($node->format) ? $node->format : NULL);
       }
-    break;
   }
 }
 
@@ -43,7 +42,7 @@ function _get_image_save($mat){
 function get_image_path() {
 	global $user;
 	$path = array();
-	if(!variable_get('get_image_path', 'get_image')){
+	if(!variable_get('get_image_path', 0)){
 		$path[] = 'get_image';
 	}else{
 		$mm = format_date(time(), 'custom', "Y|m|d");
