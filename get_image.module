@@ -1,6 +1,9 @@
 <?php
 // $Id$
 
+/**
+ * hook_menu
+ */
 function get_image_menu(){
   $items = array();
   $items['admin/settings/get_image'] = array(
@@ -13,8 +16,11 @@ function get_image_menu(){
   );
   return $items;
 }
+
+/**
+ * hook_nodeapi
+ */
 function get_image_nodeapi(&$node, $op) {
-  global $user;
   switch ($op) {
     case 'presave':
       if(variable_get('get_image_'.$node->type, 0) && $node->body){
@@ -24,21 +30,47 @@ function get_image_nodeapi(&$node, $op) {
   }
 }
 
+/**
+ * save image
+ * 保存远程图片
+ */
 function _get_image_save($mat){
-  if(!strstr($mat[2], $GLOBALS['base_url']) && strstr($mat[2], 'http://')){
-    if($data = @file_get_contents($mat[2])){
-      $filename = end(explode('/', $mat[2]));
-      $file = file_save_data($data, get_image_path().'/'.$filename);
-      drupal_set_message(t('Save "@name" success', array('@name' => $mat[2])));
-      return $mat[1].$GLOBALS['base_url']. '/' .$file.'"';
-    }else{
-      return $mat[0];
-    }
-  }else{
-    return $mat[0];
+	static $files;
+	if(!isset($files[$mat[2]])){
+	  if(!strstr($mat[2], $GLOBALS['base_url']) && strstr($mat[2], 'http://')){
+	    if($data = @file_get_contents($mat[2])){
+	      $filename = end(explode('/', $mat[2]));
+	      
+	      if($path = get_image_path()){
+		      $file = file_save_data($data, $path.'/'.$filename);
+		      
+		      drupal_set_message(t('Save "@name" success', array('@name' => $mat[2])));
+		      
+		      if(variable_get('get_image_absolute', 0)){
+		      	$file = $GLOBALS['base_url'] . $GLOBALS['base_path'] . $file;
+		      }else{
+		      	$file = $GLOBALS['base_path'] . $file;
+		      }
+		      
+		      $files[$mat[2]] = $mat[1] . $file.'"';
+	      }else{
+	      	drupal_set_message(t('Save "@name" failed', array('@name' => $mat[2])), 'error');
+	      	$files[$mat[2]] = $mat[0];
+	      }
+	    }else{
+	    	$files[$mat[2]] = $mat[0];
+	    }
+	  }else{
+	  	$files[$mat[2]] = $mat[0];
+	  }
   }
+  return $files[$mat[2]];
 }
 
+/**
+ * create folder
+ * 创建文件夹
+ */
 function get_image_path() {
 	global $user;
 	$path = array();
@@ -54,7 +86,7 @@ function get_image_path() {
 
 	$dirs = array();
 	foreach($path as $folder) {
-	$dirs[] = $folder;
+		$dirs[] = $folder;
 		$t = file_create_path(file_directory_path().'/' .implode("/", $dirs));
 		if (!file_check_directory($t, FILE_CREATE_DIRECTORY)) {
 			return false;
@@ -63,6 +95,10 @@ function get_image_path() {
 	return file_directory_path().'/' .$b;
 }
 
+/**
+ * settings
+ * 设置图片保存位置
+ */
 function get_image_settings_form() {
 	$form['get_image_path'] = array(
 		'#type'=> 'textfield',
@@ -72,7 +108,16 @@ function get_image_settings_form() {
 		'#size' => '40',
 		'#required' => TRUE,
 	);
+	
+	$form['get_image_absolute'] = array(
+		'#title' => t('Absolute path'),
+		'#type' => 'checkbox',
+		'#description' => t('View %absolute or %relative', array('%absolute' => $GLOBALS['base_url'] . $GLOBALS['base_path'] . 'files/1.jpg', '%relative' => $GLOBALS['base_path'] . 'files/1.jpg')),
+		'#default_value' => variable_get('get_image_absolute', 0),
+	);
+	
   $types = node_get_types();
+  
   foreach ($types as $type){
   	$form['get_image_'.$type->type] = array(
   		'#title' => $type->name,
@@ -80,5 +125,6 @@ function get_image_settings_form() {
   		'#default_value' => variable_get('get_image_'.$type->type, 0),
   	);
   }
+  
 	return system_settings_form($form);
 }
