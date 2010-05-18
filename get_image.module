@@ -28,6 +28,10 @@ function get_image_nodeapi(&$node, $op) {
   switch ($op) {
     case 'presave':
       if(variable_get('get_image_'.$node->type, 0) && $node->body){
+        global $get_image_node;
+        
+        $get_image_node = & $node;
+        
         $node->body = preg_replace_callback('/(<img.*?src=")(.*?)"/ms', '_get_image_save', $node->body);
         $node->teaser = node_teaser($node->body, isset($node->format) ? $node->format : NULL);
       }
@@ -57,37 +61,49 @@ function get_image_form_alter(&$form, $form_state, $form_id) {
  * 分析内容中的 img 标签，将远程图片保存到本地服务器
  */
 function _get_image_save($mat){
-	static $files;
+	global $get_image_node;
+  static $files;
+	
 	if(!isset($files[$mat[2]])){
+	  
+	  $files[$mat[2]] = $mat[0];
+	  
 	  if(!strstr($mat[2], $GLOBALS['base_url']) && strstr($mat[2], 'http://')){
-	    if($data = @file_get_contents($mat[2])){
-	      $filename = end(explode('/', $mat[2]));
+	    $file = new stdClass();
+	    
+	    // image url
+	    $file->uri =  $mat[2];
+      
+	    if($data = @file_get_contents($file->uri)){
+  	    $file->filename = basename($file->uri);
         
-	      if(variable_get('get_image_rename', 0)){
-	        $filename = md5($filename) .'.'. end(explode('.', $filename));
+        if(variable_get('get_image_rename', 0)){
+          $filename = md5($file->filename) .'.'. end(explode('.', $file->filename));
         }
         
-	      if($path = get_image_path()){
-		      $file = file_save_data($data, $path.'/'.$filename);
-		      
-		      drupal_set_message(t('Save "@name" success', array('@name' => $mat[2])));
-		      
-		      if(variable_get('get_image_absolute', 0)){
-		      	$file = $GLOBALS['base_url'] . $GLOBALS['base_path'] . $file;
-		      }else{
-		      	$file = $GLOBALS['base_path'] . $file;
-		      }
-		      
-		      $files[$mat[2]] = $mat[1] . $file.'"';
-	      }else{
-	      	drupal_set_message(t('Save "@name" failed', array('@name' => $mat[2])), 'error');
-	      	$files[$mat[2]] = $mat[0];
+        if($path = get_image_path()){
+          $file->filepath = $path.'/'.$file->filename;
+        }
+	      
+	      if($file->filepath = file_save_data($data, $file->filepath)){
+	        
+  	      if($error = file_validate_is_image($file)){
+  	        // is images
+  	        unlink($file->filepath);
+  	      }else{
+    	      drupal_set_message(t('Save "@name" success', array('@name' => $file->uri)));
+    	      
+    	      if(variable_get('get_image_absolute', 0)){
+    	      	$file->filepath = $GLOBALS['base_url'] . $GLOBALS['base_path'] . $file->filepath;
+    	      }else{
+    	      	$file->filepath = $GLOBALS['base_path'] . $file->filepath;
+    	      }
+    	      
+    	      $files[$mat[2]] = $mat[1] . $file->filepath.'"';
+  	      }
 	      }
-	    }else{
-	    	$files[$mat[2]] = $mat[0];
+	      
 	    }
-	  }else{
-	  	$files[$mat[2]] = $mat[0];
 	  }
   }
   return $files[$mat[2]];
@@ -95,7 +111,6 @@ function _get_image_save($mat){
 
 /**
  * create folder
- * 创建文件夹
  */
 function get_image_path() {
 	global $user;
