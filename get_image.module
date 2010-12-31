@@ -6,173 +6,196 @@
  */
 
 /**
- * Implementation of hook_menu()
+ * @Implement of hook_menu()
  */
-function get_image_menu(){
+function get_image_menu() {
   $items = array();
+  
   $items['admin/settings/get_image'] = array(
     'title' => 'Get Image',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('get_image_settings_form'),
     'access callback' => 'user_access',
-    'access arguments' => array('access administration pages'),
+    'access arguments' => array('Administer get image'),
     'type' => MENU_NORMAL_ITEM
   );
+  
   return $items;
 }
 
 /**
- * Implementation of hook_nodeapi()
+ * @Implement of hook_permission()
  */
-function get_image_nodeapi(&$node, $op) {
-  switch ($op) {
-    case 'presave':
-      if(variable_get('get_image_'.$node->type, 0) && $node->body){
-        global $get_image_node;
-        
-        $get_image_node = & $node;
-        
-        $node->body = preg_replace_callback('/(<img.*?src=")(.*?)"/ms', '_get_image_save', $node->body);
-        $node->teaser = node_teaser($node->body, isset($node->format) ? $node->format : NULL);
-      }
+function get_image_permission() {
+  return array(
+    'administer get images' => array(
+      'title' => t('Administer get image'),
+    ),
+  );
+}
+
+/**
+ * @Implement of hook_nodeapi()
+ */
+function get_image_node_presave($node) {
+  if (variable_get('get_image_'.$node->type, 0) && !empty($node->body['und'])) {
+    global $_get_image_save_node;
+    $_get_image_save_node = $node;
+    if ($node->body['und'][0]) {
+      $node->body['und'][0]['value'] = preg_replace_callback('/(<img.*?src=["|\'])(.*?)["|\']/ms', '_get_image_save', $node->body['und'][0]['value']);
+    }
   }
 }
 
 /**
- * Implementation of hook_form_alter()
- * 节点表单中提供一个可选按钮
- */
-
-/*
-function get_image_form_alter(&$form, $form_state, $form_id) {
-	if ($form['#id'] == 'node-form' && isset($form['#node']->type) && variable_get('get_image_'.$form['#node']->type, 0)) {
-		$form['get_image_image'] = array(
-			'#type' => 'checkbox',
-			'#title' => t('Save remote image'),
-      '#weight' => -1
-		);
-	}
-}
-
-**/
-
-/**
- * save image
+ * 
  * 分析内容中的 img 标签，将远程图片保存到本地服务器
+ * 
+ * @param (array) $mat
+ *  正则匹配参数
+ *  
+ * @return (string) 替换后的节点内容
  */
-function _get_image_save($mat){
-	global $get_image_node;
+function _get_image_save($mat) {
+  global $_get_image_save_node;
   static $files;
-	
-	if(!isset($files[$mat[2]])){
-	  
-	  $files[$mat[2]] = $mat[0];
-	  
-	  if(!strstr($mat[2], $GLOBALS['base_url']) && strstr($mat[2], 'http://')){
-	    $file = new stdClass();
-	    
-	    // image url
-	    $file->uri =  $mat[2];
+  
+  if (!isset($files[$mat[2]])) {
+    
+    $files[$mat[2]] = $mat[0];
+    
+    /**
+     * 包含当前域名的路径、相对路径，不做处理，通常为本地文件
+     */
+    if (strpos($mat[2], $GLOBALS['base_url']) === false && strpos($mat[2], 'http://') !== false) {
       
-	    if($data = @file_get_contents($file->uri)){
-  	    $file->filename = basename($file->uri);
-        
-        if(variable_get('get_image_rename', 0)){
-          $filename = md5($file->filename) .'.'. end(explode('.', $file->filename));
+      if ($data = file_get_contents($mat[2])) {
+        $filename = end(explode('/', $mat[2]));
+
+        if (variable_get('get_image_rename', 0)) {
+          $filename = md5($filename) .'.'. end(explode('.', $filename));
+        }
+
+        if ($filepath = get_image_path($_get_image_save_node)) {
+          
+          $filepath .= '/' . $filename;
+          
+          if (file_put_contents($filepath, $data)) {
+            
+            drupal_set_message(t('Save "@name" success', array('@name' => $mat[2])));
+            
+            /**
+             * 验证是否为图片文件
+             */
+            $info = image_get_info($filepath);
+            
+            if (!empty($info) && $info['width']) {
+              if (variable_get('get_image_absolute', 0)) {
+                $filepath = $GLOBALS['base_url'] . $GLOBALS['base_path'] . $filepath;
+              } else {
+                $filepath = $GLOBALS['base_path'] . $filepath;
+              }
+              $files[$mat[2]] = $mat[1] . $filepath.'"';
+            } else {
+              // 不是合法的图片文件
+              @unlink($filepath);
+              drupal_set_message(t('Save "@name" failed', array('@name' => $mat[2])), 'error');
+            }
+            
+          }
+        } else {
+          drupal_set_message(t('Save "@name" failed', array('@name' => $mat[2])), 'error');
         }
         
-        if($path = get_image_path()){
-          $file->filepath = $path.'/'.$file->filename;
-        }
-	      
-	      if($file->filepath = file_save_data($data, $file->filepath)){
-	        
-  	      if($error = file_validate_is_image($file)){
-  	        // is images
-  	        unlink($file->filepath);
-  	      }else{
-    	      drupal_set_message(t('Save "@name" success', array('@name' => $file->uri)));
-    	      
-    	      if(variable_get('get_image_absolute', 0)){
-    	      	$file->filepath = $GLOBALS['base_url'] . $GLOBALS['base_path'] . $file->filepath;
-    	      }else{
-    	      	$file->filepath = $GLOBALS['base_path'] . $file->filepath;
-    	      }
-    	      
-    	      $files[$mat[2]] = $mat[1] . $file->filepath.'"';
-  	      }
-	      }
-	      
-	    }
-	  }
+      }
+    }
   }
+  
   return $files[$mat[2]];
 }
 
 /**
- * create folder
+ * 
+ * 创建文件夹
+ * @param (object) $node
+ *  节点对象
+ * @return 返回路径
+ * 
  */
-function get_image_path() {
-	global $user;
-	$path = array();
-	if(!variable_get('get_image_path', 0)){
-		$path[] = 'get_image';
-	}else{
-		$mm = format_date(time(), 'custom', "Y|m|d");
-    $m = explode('|', $mm);
-		$a = array('%uid' => $user->uid, '%username' => $user->name, '%Y' => $m[0], '%m' => $m[1], '%d' => $m[2]);
-		$b = strtr(variable_get('get_image_path', 'get_image'), $a);
-		$path = explode('/',$b);
-	}
+function get_image_path($node = NULL) {
+  global $user;
+  
+  $path = variable_get('file_public_path', conf_path() . '/files') . '/';
+  
+  if (!variable_get('get_image_path', 0)) {
+    $path .= 'get_image';
+  } else {
+    
+    $m = explode('|', format_date(time(), 'custom', "Y|m|d"));
+    $a = array(
+      '%uid' => $user->uid,
+      '%username' => $user->name,
+      '%Y' => $m[0],
+      '%m' => $m[1],
+      '%d' => $m[2]
+    );
+    
+    if (isset($node)) {
+      if (!empty($node->nid)) {
+        $a['%nid'] = $node->nid;
+      }
+      
+      if (!empty($node->uid)) {
+        $a['%uid'] = $node->uid;
+      }
+    }
 
-	$dirs = array();
-	foreach($path as $folder) {
-		$dirs[] = $folder;
-		$t = file_create_path(file_directory_path().'/' .implode("/", $dirs));
-		if (!file_check_directory($t, FILE_CREATE_DIRECTORY)) {
-			return false;
-		}
-	}
-	return file_directory_path().'/' .$b;
+    $path .= strtr(variable_get('get_image_path', 'get_image'), $a);
+  }
+
+  if (file_prepare_directory($path, FILE_CREATE_DIRECTORY)) {
+    return $path;
+  }
 }
 
 /**
- * settings
- * 设置图片保存位置
+ * 
+ * 模块设置
+ * 
  */
 function get_image_settings_form() {
-	$form['get_image_path'] = array(
+  $form['get_image_path'] = array(
 		'#type'=> 'textfield',
 		'#title' => t('Path of saving'),
 		'#default_value' => variable_get('get_image_path', 'get_image'),
 		'#description' => t('The path where the files should be saved, may save by user id or user name or time, e.g.: get_image/%uid or photos/%username or image/%Y/%m/%d. Available variables: %uid, %username, %Y, %m, %d.'),
 		'#size' => '40',
 		'#required' => TRUE,
-	);
-	
-	$form['get_image_absolute'] = array(
+  );
+
+  $form['get_image_absolute'] = array(
 		'#title' => t('Absolute path'),
 		'#type' => 'checkbox',
 		'#description' => t('View %absolute or %relative', array('%absolute' => $GLOBALS['base_url'] . $GLOBALS['base_path'] . 'files/1.jpg', '%relative' => $GLOBALS['base_path'] . 'files/1.jpg')),
 		'#default_value' => variable_get('get_image_absolute', 0),
-	);
-	
-	$form['get_image_rename'] = array(
+  );
+
+  $form['get_image_rename'] = array(
 		'#title' => t('Image Rename'),
 		'#type' => 'checkbox',
 		'#description' => t('e.g: md5("imagename");'),
 		'#default_value' => variable_get('get_image_rename', 0),
-	);
-	
-  $types = node_get_types();
+  );
   
-  foreach ($types as $type){
-  	$form['get_image_'.$type->type] = array(
+  $types = node_type_get_types();
+  
+  foreach ($types as $type) {
+    $form['get_image_'.$type->type] = array(
   		'#title' => $type->name,
   		'#type' => 'checkbox',
   		'#default_value' => variable_get('get_image_'.$type->type, 0),
-  	);
+    );
   }
-  
-	return system_settings_form($form);
+
+  return system_settings_form($form);
 }
