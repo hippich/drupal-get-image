@@ -1,4 +1,3 @@
-; $Id$ 
 name = "get_image"
 description = Long-range images will be saved to the local server. 
 version = "7.x-1.0-alpha1"
