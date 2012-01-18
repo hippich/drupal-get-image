@@ -77,6 +77,12 @@ function _get_image_save($mat) {
           // Remove possible extra query/anchor parameters
           $extension = preg_replace('/(\?|\#).*/', '', $extension);
 
+          // If no extension found assume it is JPEG
+          // @TODO: read image and detect image type from header
+          if (! $extension) {
+            $extension = 'jpg';
+          }
+
           $filename = md5($filename) .'.'. $extension;
         }
 
