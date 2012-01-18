@@ -72,15 +72,41 @@ function _get_image_save($mat) {
         $filename = end(explode('/', $mat[2]));
 
         if (variable_get('get_image_rename', 0)) {
-          $extension = end(explode('.', $filename));
+          $filename_parts = explode('.', $filename);
+          $extension = '';
 
-          // Remove possible extra query/anchor parameters
-          $extension = preg_replace('/(\?|\#).*/', '', $extension);
+          if (count($filename_parts) > 1) {
+            $extension = end($filename_parts);
+            
+            // Remove possible extra query/anchor parameters
+            $extension = preg_replace('/(\?|\#).*/', '', $extension);
+          }
 
-          // If no extension found assume it is JPEG
-          // @TODO: read image and detect image type from header
+          // If no extension appear in URL, try to guess one
           if (! $extension) {
-            $extension = 'jpg';
+            $content_type = '';
+
+            foreach ($http_response_header as $line) {
+              if (preg_match('/Content-[Tt]ype: /', $line)) {
+                $content_type = end(explode(': ', $line));
+                break;
+              }
+            }
+
+            switch ($content_type) {
+              case 'image/jpg':
+              case 'image/jpeg':
+                $extension = 'jpg';
+
+              case 'image/gif':
+                $extension = 'gif';
+
+              case 'image/png':
+                $extension = 'png';
+
+              default:
+                $extension = 'jpg';
+            }
           }
 
           $filename = md5($filename) .'.'. $extension;
