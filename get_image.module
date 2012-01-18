@@ -72,7 +72,12 @@ function _get_image_save($mat) {
         $filename = end(explode('/', $mat[2]));
 
         if (variable_get('get_image_rename', 0)) {
-          $filename = md5($filename) .'.'. end(explode('.', $filename));
+          $extension = end(explode('.', $filename));
+
+          // Remove possible extra query/anchor parameters
+          $extension = preg_replace('/(\?|\#).*/', '', $extension);
+
+          $filename = md5($filename) .'.'. $extension;
         }
 
         if ($filepath = get_image_path($_get_image_save_node)) {
